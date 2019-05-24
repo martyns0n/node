@@ -11,7 +11,7 @@
     'mksnapshot_exec': '<(PRODUCT_DIR)/<(EXECUTABLE_PREFIX)mksnapshot<(EXECUTABLE_SUFFIX)',
     'v8_os_page_size%': 0,
     'generate_bytecode_output_root': '<(SHARED_INTERMEDIATE_DIR)/generate-bytecode-output-root',
-    'generate_bytecode_builtins_list_output' : '<(generate_bytecode_output_root)/builtins-generated/bytecodes-builtins-list.h',
+    'generate_bytecode_builtins_list_output': '<(generate_bytecode_output_root)/builtins-generated/bytecodes-builtins-list.h',
     'torque_files': [
       "<(V8_ROOT)/src/builtins/arguments.tq",
       "<(V8_ROOT)/src/builtins/array-copywithin.tq",
@@ -142,8 +142,14 @@
     {
       'target_name': 'run_torque',
       'type': 'none',
+      'conditions': [
+        ['want_separate_host_toolset', {
+          'toolsets': ['host', 'target'],
+        }],
+      ],
+      'hard_dependency': 1,
       'dependencies': [
-        'torque',
+        'torque#host',
       ],
       'direct_dependant_settings': {
         'include_dirs': [
@@ -174,12 +180,15 @@
           ],
         },
       ],
-    }, # run_torque
+    },  # run_torque
     {
       'target_name': 'v8_maybe_icu',
       'type': 'none',
       'hard_dependency': 1,
       'conditions': [
+        ['want_separate_host_toolset', {
+          'toolsets': ['host', 'target'],
+        }],
         ['v8_enable_i18n_support', {
           'dependencies': [
             '<(icu_gyp_path):icui18n',
@@ -198,46 +207,69 @@
           },
         }],
       ],
-    }, # v8_maybe_icu
+    },  # v8_maybe_icu
     {
       'target_name': 'torque_generated_initializers',
       'type': 'none',
+      'hard_dependency': 1,
+      'conditions': [
+        ['want_separate_host_toolset', {
+          'toolsets': ['host', 'target'],
+        }],
+      ],
       'dependencies': [
         'generate_bytecode_builtins_list',
         'run_torque',
         'v8_maybe_icu',
       ],
-      'sources': [
-        '<@(torque_outputs)',
-      ],
-    }, # torque_generated_initializers
+      'direct_dependent_settings': {
+        'sources': [
+          '<@(torque_outputs)',
+        ],
+      }
+    },  # torque_generated_initializers
     {
       'target_name': 'torque_generated_definitions',
-      'type': 'static_library',
+      'type': 'none',
+      'hard_dependency': 1,
+      'conditions': [
+        ['want_separate_host_toolset', {
+          'toolsets': ['host', 'target'],
+        }],
+      ],
       'dependencies': [
         'generate_bytecode_builtins_list',
         'run_torque',
         'v8_maybe_icu',
       ],
-      'sources': [
-        '<(torque_output_root)/torque-generated/class-definitions-tq.cc',
-        '<(torque_output_root)/torque-generated/class-verifiers-tq.cc',
-        '<(torque_output_root)/torque-generated/class-verifiers-tq.h',
-        '<(torque_output_root)/torque-generated/objects-printer-tq.cc',
-      ],
       'direct_dependant_settings': {
+        'sources': [
+          '<(torque_output_root)/torque-generated/class-definitions-tq.cc',
+          '<(torque_output_root)/torque-generated/class-verifiers-tq.cc',
+          '<(torque_output_root)/torque-generated/class-verifiers-tq.h',
+          '<(torque_output_root)/torque-generated/objects-printer-tq.cc',
+        ],
         'include_dirs': [
           '<(torque_output_root)',
         ],
       },
-    }, # torque_generated_definitions
+    },  # torque_generated_definitions
     {
       'target_name': 'generate_bytecode_builtins_list',
       'type': 'none',
+      'hard_dependency': 1,
+      'conditions': [
+        ['want_separate_host_toolset', {
+          'toolsets': ['host', 'target'],
+        }],
+      ],
       'dependencies': [
-        'bytecode_builtins_list_generator',
+        'bytecode_builtins_list_generator#host',
       ],
       'direct_dependent_settings': {
+        'sources': [
+          '<(generate_bytecode_builtins_list_output)',
+        ],
         'include_dirs': [
           '<(generate_bytecode_output_root)',
           '<(torque_output_root)',
@@ -260,7 +292,7 @@
           ],
         },
       ],
-    }, # generate_bytecode_builtins_list
+    },  # generate_bytecode_builtins_list
 
     {
       # This rule delegates to either v8_snapshot, v8_nosnapshot, or
@@ -268,6 +300,7 @@
       # The intention is to make the 'calling' rules a bit simpler.
       'target_name': 'v8_maybe_snapshot',
       'type': 'none',
+      'toolsets': ['target'],
       'hard_dependency': 1,
       'conditions': [
         ['v8_use_snapshot!=1', {
@@ -289,10 +322,15 @@
           'dependencies': ['v8_base', 'v8_external_snapshot'],
         }],
       ]
-    }, # v8_maybe_snapshot
+    },  # v8_maybe_snapshot
     {
       'target_name': 'v8_init',
       'type': 'static_library',
+      'conditions': [
+        ['want_separate_host_toolset', {
+          'toolsets': ['host', 'target'],
+        }],
+      ],
       'dependencies': [
         'generate_bytecode_builtins_list',
         'run_torque',
@@ -305,7 +343,7 @@
 
         # '<(generate_bytecode_builtins_list_output)',
       ],
-    }, # v8_init
+    },  # v8_init
     {
       'target_name': 'v8_initializers',
       'type': 'static_library',
@@ -322,6 +360,9 @@
         '<@(torque_outputs)',
       ],
       'conditions': [
+        ['want_separate_host_toolset', {
+          'toolsets': ['host', 'target'],
+        }],
         ['v8_target_arch=="ia32"', {
           'sources': [
             '<(V8_ROOT)/src/builtins/ia32/builtins-ia32.cc',
@@ -368,50 +409,34 @@
             '<(icu_gyp_path):icuuc',
           ],
         }, {
-          'sources!': [
-            '<(V8_ROOT)/src/builtins/builtins-intl-gen.cc',
-          ],
-        }],
+           'sources!': [
+             '<(V8_ROOT)/src/builtins/builtins-intl-gen.cc',
+           ],
+         }],
         ['OS=="win"', {
           'msvs_precompiled_header': '<(V8_ROOT)/../../tools/msvs/pch/v8_pch.h',
           'msvs_precompiled_source': '<(V8_ROOT)/../../tools/msvs/pch/v8_pch.cc',
           'sources': [
             '<(_msvs_precompiled_header)',
             '<(_msvs_precompiled_source)',
-           ],
+          ],
         }],
       ],
-      'configurations': {
-        'Debug': {
-          'msvs_settings': {
-            'VCCLCompilerTool': {
-              'AdditionalOptions': [ '-d2SSAOptimizer-' ], # Workaround VS2019 bug https://developercommunity.visualstudio.com/content/problem/512352/compiler-doesnt-finish-142027508.html
-            },
-          },
-        },
-        'Release': {
-          'msvs_settings': {
-            'VCCLCompilerTool': {
-              'AdditionalOptions': [ '-d2SSAOptimizer-' ], # Workaround VS2019 bug https://developercommunity.visualstudio.com/content/problem/512352/compiler-doesnt-finish-142027508.html
-            },
-          },
-        },
-      },
-    }, # v8_initializers
+    },  # v8_initializers
     {
       'target_name': 'v8_snapshot',
       'type': 'static_library',
+      'toolsets': ['target'],
       'dependencies': [
         'generate_bytecode_builtins_list',
         'run_torque',
-        'mksnapshot',
+        'mksnapshot#host',
         'v8_maybe_icu',
 
         # [GYP] added explicitly, instead of inheriting from the other deps
         'v8_base_without_compiler',
         'v8_compiler_for_mksnapshot',
         'v8_initializers',
-        'v8_libbase',
         'v8_libplatform',
       ],
       'sources': [
@@ -446,7 +471,7 @@
             ['v8_enable_embedded_builtins', {
               # In this case we use `embedded_variant "Default"`
               # and `suffix = ''` for the template `embedded${suffix}.S`.
-              'outputs': [ '<(INTERMEDIATE_DIR)/embedded.S' ],
+              'outputs': ['<(INTERMEDIATE_DIR)/embedded.S'],
               'variables': {
                 'mksnapshot_flags': [
                   '--embedded_variant', 'Default',
@@ -492,16 +517,16 @@
               'variables': {
                 'mksnapshot_flags': ['--native-code-counters'],
               },
-            },{
-              # --native-code-counters is the default in debug mode so make sure we can
-              # unset it.
-              'variables': {
-                'mksnapshot_flags': ['--no-native-code-counters'],
-              },
-            }],
+            }, {
+               # --native-code-counters is the default in debug mode so make sure we can
+               # unset it.
+               'variables': {
+                 'mksnapshot_flags': ['--no-native-code-counters'],
+               },
+             }],
           ],
           'direct_dependent_settings': {
-            'sources': [ '<@(_outputs)' ],
+            'sources': ['<@(_outputs)'],
           },
           'action': [
             '>@(_inputs)',
@@ -509,7 +534,7 @@
           ],
         },
       ],
-    }, # v8_snapshot
+    },  # v8_snapshot
     {
       'target_name': 'v8_nosnapshot',
       'type': 'static_library',
@@ -525,16 +550,24 @@
         '<(V8_ROOT)/src/snapshot/snapshot-empty.cc',
       ],
       'conditions': [
+        ['want_separate_host_toolset', {
+          'toolsets': ['host', 'target'],
+        }],
         ['component=="shared_library"', {
           'defines': [
             'BUILDING_V8_SHARED',
           ],
         }],
       ]
-    }, # v8_nosnapshot
+    },  # v8_nosnapshot
     {
       'target_name': 'v8_version',
       'type': 'none',
+      'conditions': [
+        ['want_separate_host_toolset', {
+          'toolsets': ['host', 'target'],
+        }],
+      ],
       'direct_dependent_settings': {
         'sources': [
           '<(V8_ROOT)/include/v8-value-serializer-version.h',
@@ -542,10 +575,15 @@
           '<(V8_ROOT)/include/v8-version.h',
         ],
       },
-    }, # v8_version
+    },  # v8_version
     {
       'target_name': 'v8_headers',
       'type': 'none',
+      'conditions': [
+        ['want_separate_host_toolset', {
+          'toolsets': ['host', 'target'],
+        }],
+      ],
       'dependencies': [
         'v8_version',
       ],
@@ -562,10 +600,15 @@
           '<(V8_ROOT)/include/v8-wasm-trap-handler-win.h',
         ],
       },
-    }, # v8_headers
+    },  # v8_headers
     {
       'target_name': 'v8_shared_internal_headers',
       'type': 'none',
+      'conditions': [
+        ['want_separate_host_toolset', {
+          'toolsets': ['host', 'target'],
+        }],
+      ],
       'dependencies': [
         'v8_headers',
       ],
@@ -574,7 +617,7 @@
           '<(V8_ROOT)/src/globals.h',
         ],
       },
-    }, # v8_shared_internal_headers
+    },  # v8_shared_internal_headers
     {
       'target_name': 'v8_compiler_opt',
       'type': 'static_library',
@@ -583,8 +626,11 @@
         'run_torque',
         'v8_maybe_icu',
       ],
-      'sources': [ '<@(v8_compiler_sources)' ],
+      'sources': ['<@(v8_compiler_sources)'],
       'conditions': [
+        ['want_separate_host_toolset', {
+          'toolsets': ['host', 'target'],
+        }],
         ['OS=="win"', {
           'msvs_precompiled_header': '<(V8_ROOT)/../../tools/msvs/pch/v8_pch.h',
           'msvs_precompiled_source': '<(V8_ROOT)/../../tools/msvs/pch/v8_pch.cc',
@@ -594,7 +640,7 @@
           ],
         }],
       ],
-    }, # v8_compiler_opt
+    },  # v8_compiler_opt
     {
       'target_name': 'v8_compiler',
       'type': 'static_library',
@@ -603,8 +649,11 @@
         'run_torque',
         'v8_maybe_icu',
       ],
-      'sources': [ '<@(v8_compiler_sources)' ],
+      'sources': ['<@(v8_compiler_sources)'],
       'conditions': [
+        ['want_separate_host_toolset', {
+          'toolsets': ['host', 'target'],
+        }],
         ['OS=="win"', {
           'msvs_precompiled_header': '<(V8_ROOT)/../../tools/msvs/pch/v8_pch.h',
           'msvs_precompiled_source': '<(V8_ROOT)/../../tools/msvs/pch/v8_pch.cc',
@@ -614,45 +663,37 @@
           ],
         }],
       ],
-    }, # v8_compiler
+    },  # v8_compiler
     {
       'target_name': 'v8_compiler_for_mksnapshot',
-      'type': 'static_library',
+      'type': 'none',
+      'hard_dependency': 1,
       'dependencies': [
         'generate_bytecode_builtins_list',
         'run_torque',
         'v8_maybe_icu',
       ],
       'conditions': [
+        ['want_separate_host_toolset', {
+          'toolsets': ['host', 'target'],
+        }],
         ['is_component_build and not v8_optimized_debug and v8_enable_fast_mksnapshot', {
           'dependencies': [
-            'generate_bytecode_builtins_list',
-            'run_torque',
             'v8_compiler_opt',
           ],
           'export_dependent_settings': [
             'v8_compiler_opt',
           ],
         }, {
-          'dependencies': [
-            'generate_bytecode_builtins_list',
-            'run_torque',
-            'v8_compiler',
-          ],
-          'export_dependent_settings': [
-            'v8_compiler',
-          ],
-        }],
-        ['OS=="win"', {
-          'msvs_precompiled_header': '<(V8_ROOT)/../../tools/msvs/pch/v8_pch.h',
-          'msvs_precompiled_source': '<(V8_ROOT)/../../tools/msvs/pch/v8_pch.cc',
-          'sources': [
-            '<(_msvs_precompiled_header)',
-            '<(_msvs_precompiled_source)',
-          ],
-        }],
+           'dependencies': [
+             'v8_compiler',
+           ],
+           'export_dependent_settings': [
+             'v8_compiler',
+           ],
+         }],
       ],
-    }, # v8_compiler_for_mksnapshot
+    },  # v8_compiler_for_mksnapshot
     {
       'target_name': 'v8_base_without_compiler',
       'type': 'static_library',
@@ -669,7 +710,7 @@
         'run_torque',
         'v8_maybe_icu',
       ],
-      'includes': [ 'inspector.gypi' ],
+      'includes': ['inspector.gypi'],
       'direct_dependent_settings': {
         'include_dirs': [
           '<(generate_bytecode_output_root)',
@@ -687,6 +728,9 @@
         '<@(inspector_all_sources)',
       ],
       'conditions': [
+        ['want_separate_host_toolset', {
+          'toolsets': ['host', 'target'],
+        }],
         ['v8_target_arch=="ia32"', {
           'sources': [  ### gcmole(arch:ia32) ###
             '<(V8_ROOT)/src/compiler/backend/ia32/code-generator-ia32.cc',
@@ -957,7 +1001,7 @@
           # .cpp files in the same shard.
           'msvs_settings': {
             'VCCLCompilerTool': {
-              'ObjectFile':'$(IntDir)%(Extension)\\',
+              'ObjectFile': '$(IntDir)%(Extension)\\',
             },
           },
         }],
@@ -966,21 +1010,23 @@
             'BUILDING_V8_SHARED',
           ],
         }],
-        ['v8_enable_i18n_support==1', {
+        ['v8_enable_i18n_support', {
           'conditions': [
-            ['icu_use_data_file_flag==1', {
+            ['icu_use_data_file_flag', {
               'defines': ['ICU_UTIL_DATA_IMPL=ICU_UTIL_DATA_FILE'],
-            }, { # else icu_use_data_file_flag !=1
-              'conditions': [
-                ['OS=="win"', {
-                  'defines': ['ICU_UTIL_DATA_IMPL=ICU_UTIL_DATA_SHARED'],
-                }, {
-                  'defines': ['ICU_UTIL_DATA_IMPL=ICU_UTIL_DATA_STATIC'],
-                }],
-              ],
-            }],
+            }, {
+               'conditions': [
+                 ['OS=="win"', {
+                   'defines': ['ICU_UTIL_DATA_IMPL=ICU_UTIL_DATA_SHARED'],
+                 }, {
+                    'defines': ['ICU_UTIL_DATA_IMPL=ICU_UTIL_DATA_STATIC'],
+                  }],
+               ],
+             }],
             ['OS=="win"', {
-              'dependencies': [ '<(icu_gyp_path):icudata', ],
+              'dependencies': [
+                '<(icu_gyp_path):icudata#target',
+              ],
             }],
           ],
         }, {  # v8_enable_i18n_support==0
@@ -1027,25 +1073,34 @@
         }],
         # Platforms that don't have Compare-And-Swap (CAS) support need to link atomic library
         # to implement atomic memory access
-        [ 'v8_current_cpu in ["mips", "mipsel", "mips64", "mips64el", "ppc", "ppc64", "s390", "s390x"]', {
+        ['v8_current_cpu in ["mips", "mipsel", "mips64", "mips64el", "ppc", "ppc64", "s390", "s390x"]', {
           'link_settings': {
-            'libraries': [ '-latomic', ],
+            'libraries': ['-latomic', ],
           },
-        },
-          ],
+        }],
       ],
-    }, # v8_base_without_compiler
+    },  # v8_base_without_compiler
     {
       'target_name': 'v8_base',
       'type': 'none',
+      'conditions': [
+        ['want_separate_host_toolset', {
+          'toolsets': ['host', 'target'],
+        }],
+      ],
       'dependencies': [
         'v8_base_without_compiler',
         'v8_compiler',
       ],
-    }, # v8_base
+    },  # v8_base
     {
       'target_name': 'torque_base',
       'type': 'static_library',
+      'conditions': [
+        ['want_separate_host_toolset', {
+          'toolsets': ['host', 'target'],
+        }],
+      ],
       'sources': [
         '<(V8_ROOT)/src/torque/ast.h',
         '<(V8_ROOT)/src/torque/cfg.cc',
@@ -1095,7 +1150,7 @@
       'cflags_cc!': ['-fno-exceptions'],
       'cflags_cc': ['-fexceptions'],
       'xcode_settings': {
-        'GCC_ENABLE_CPP_EXCEPTIONS': 'YES',        # -fexceptions
+        'GCC_ENABLE_CPP_EXCEPTIONS': 'YES',  # -fexceptions
       },
       'msvs_settings': {
         'VCCLCompilerTool': {
@@ -1103,10 +1158,15 @@
           'ExceptionHandling': 1,
         },
       },
-    }, # torque_base
+    },  # torque_base
     {
       'target_name': 'torque_ls_base',
       'type': 'static_library',
+      'conditions': [
+        ['want_separate_host_toolset', {
+          'toolsets': ['host', 'target'],
+        }],
+      ],
       'sources': [
         '<(V8_ROOT)/src/torque/ls/globals.h',
         '<(V8_ROOT)/src/torque/ls/json-parser.cc',
@@ -1129,7 +1189,7 @@
       'cflags_cc!': ['-fno-exceptions'],
       'cflags_cc': ['-fexceptions'],
       'xcode_settings': {
-        'GCC_ENABLE_CPP_EXCEPTIONS': 'YES',        # -fexceptions
+        'GCC_ENABLE_CPP_EXCEPTIONS': 'YES',  # -fexceptions
       },
       'msvs_settings': {
         'VCCLCompilerTool': {
@@ -1137,7 +1197,7 @@
           'ExceptionHandling': 1,
         },
       },
-    }, # torque_ls_base
+    },  # torque_ls_base
     {
       'target_name': 'v8_libbase',
       'type': 'static_library',
@@ -1150,8 +1210,11 @@
       ],
 
       'conditions': [
+        ['want_separate_host_toolset', {
+          'toolsets': ['host', 'target'],
+        }],
         ['is_component_build', {
-          'defines': [ "BUILDING_V8_BASE_SHARED" ],
+          'defines': ["BUILDING_V8_BASE_SHARED"],
         }],
         ['is_posix or is_fuchsia', {
           'sources': [
@@ -1223,11 +1286,11 @@
                      }],
                   ],
                 }, {
-                  'sources': [
-                    '<(V8_ROOT)/src/base/debug/stack_trace_android.cc'
-                    '<(V8_ROOT)/src/base/platform/platform-linux.cc'
-                  ]
-                }],
+                   'sources': [
+                     '<(V8_ROOT)/src/base/debug/stack_trace_android.cc'
+                     '<(V8_ROOT)/src/base/platform/platform-linux.cc'
+                   ]
+                 }],
               ],
             }],
           ],
@@ -1236,14 +1299,14 @@
           'sources': [
             '<(V8_ROOT)/src/base/debug/stack_trace_fuchsia.cc',
             '<(V8_ROOT)/src/base/platform/platform-fuchsia.cc',
-          ]},
-        ],
+          ]
+        }],
         ['OS == "mac" or OS == "ios"', {
           'sources': [
             '<(V8_ROOT)/src/base/debug/stack_trace_posix.cc',
             '<(V8_ROOT)/src/base/platform/platform-macos.cc',
-          ]},
-        ],
+          ]
+        }],
         ['is_win', {
           'sources': [
             '<(V8_ROOT)/src/base/debug/stack_trace_win.cc',
@@ -1251,8 +1314,8 @@
             '<(V8_ROOT)/src/base/win32-headers.h',
           ],
 
-          'defines': [ '_CRT_RAND_S' ],  # for rand_s()
-          'direct_dependent_settings':{
+          'defines': ['_CRT_RAND_S'],  # for rand_s()
+          'direct_dependent_settings': {
             'msvs_settings': {
               'VCLinkerTool': {
                 'AdditionalDependencies': [
@@ -1279,7 +1342,8 @@
             'libraries': [
               '-lnsl',
               '-lrt',
-            ]},
+            ]
+          },
           'sources': [
             '<(V8_ROOT)/src/base/debug/stack_trace_posix.cc',
             '<(V8_ROOT)/src/base/platform/platform-solaris.cc',
@@ -1288,94 +1352,97 @@
 
         # YMMV with the following conditions
         ['OS=="qnx"', {
-            'link_settings': {
-              'target_conditions': [
-                ['_toolset=="host" and host_os=="linux"', {
-                  'libraries': [
-                    '-lrt'
-                  ],
-                }],
-                ['_toolset=="target"', {
-                  'libraries': [
-                    '-lbacktrace'
-                  ],
-                }],
-              ],
-            },
-            'sources': [
-              '<(V8_ROOT)/src/base/debug/stack_trace_posix.cc',
-              '<(V8_ROOT)/src/base/platform/platform-posix.h',
-              '<(V8_ROOT)/src/base/platform/platform-posix.cc',
-              '<(V8_ROOT)/src/base/platform/platform-posix-time.h',
-              '<(V8_ROOT)/src/base/platform/platform-posix-time.cc',
-              '<(V8_ROOT)/src/base/qnx-math.h'
-            ],
+          'link_settings': {
             'target_conditions': [
               ['_toolset=="host" and host_os=="linux"', {
-                'sources': [
-                  '<(V8_ROOT)/src/base/platform/platform-linux.cc'
-                ],
-              }],
-              ['_toolset=="host" and host_os=="mac"', {
-                'sources': [
-                  '<(V8_ROOT)/src/base/platform/platform-macos.cc'
+                'libraries': [
+                  '-lrt'
                 ],
               }],
               ['_toolset=="target"', {
-                'sources': [
-                  '<(V8_ROOT)/src/base/platform/platform-qnx.cc'
+                'libraries': [
+                  '-lbacktrace'
                 ],
               }],
             ],
           },
-        ],
+          'sources': [
+            '<(V8_ROOT)/src/base/debug/stack_trace_posix.cc',
+            '<(V8_ROOT)/src/base/platform/platform-posix.h',
+            '<(V8_ROOT)/src/base/platform/platform-posix.cc',
+            '<(V8_ROOT)/src/base/platform/platform-posix-time.h',
+            '<(V8_ROOT)/src/base/platform/platform-posix-time.cc',
+            '<(V8_ROOT)/src/base/qnx-math.h'
+          ],
+          'target_conditions': [
+            ['_toolset=="host" and host_os=="linux"', {
+              'sources': [
+                '<(V8_ROOT)/src/base/platform/platform-linux.cc'
+              ],
+            }],
+            ['_toolset=="host" and host_os=="mac"', {
+              'sources': [
+                '<(V8_ROOT)/src/base/platform/platform-macos.cc'
+              ],
+            }],
+            ['_toolset=="target"', {
+              'sources': [
+                '<(V8_ROOT)/src/base/platform/platform-qnx.cc'
+              ],
+            }],
+          ],
+        },
+         ],
         ['OS=="freebsd"', {
-            'link_settings': {
-              'libraries': [
-                '-L/usr/local/lib -lexecinfo',
-            ]},
-            'sources': [
-              '<(V8_ROOT)/src/base/debug/stack_trace_posix.cc',
-              '<(V8_ROOT)/src/base/platform/platform-freebsd.cc',
-              '<(V8_ROOT)/src/base/platform/platform-posix.h',
-              '<(V8_ROOT)/src/base/platform/platform-posix.cc',
-              '<(V8_ROOT)/src/base/platform/platform-posix-time.h',
-              '<(V8_ROOT)/src/base/platform/platform-posix-time.cc',
-            ],
-          }
-        ],
+          'link_settings': {
+            'libraries': [
+              '-L/usr/local/lib -lexecinfo',
+            ]
+          },
+          'sources': [
+            '<(V8_ROOT)/src/base/debug/stack_trace_posix.cc',
+            '<(V8_ROOT)/src/base/platform/platform-freebsd.cc',
+            '<(V8_ROOT)/src/base/platform/platform-posix.h',
+            '<(V8_ROOT)/src/base/platform/platform-posix.cc',
+            '<(V8_ROOT)/src/base/platform/platform-posix-time.h',
+            '<(V8_ROOT)/src/base/platform/platform-posix-time.cc',
+          ],
+        }
+         ],
         ['OS=="openbsd"', {
-            'link_settings': {
-              'libraries': [
-                '-L/usr/local/lib -lexecinfo',
-            ]},
-            'sources': [
-              '<(V8_ROOT)/src/base/debug/stack_trace_posix.cc',
-              '<(V8_ROOT)/src/base/platform/platform-openbsd.cc',
-              '<(V8_ROOT)/src/base/platform/platform-posix.h',
-              '<(V8_ROOT)/src/base/platform/platform-posix.cc',
-              '<(V8_ROOT)/src/base/platform/platform-posix-time.h',
-              '<(V8_ROOT)/src/base/platform/platform-posix-time.cc',
-            ],
-          }
-        ],
+          'link_settings': {
+            'libraries': [
+              '-L/usr/local/lib -lexecinfo',
+            ]
+          },
+          'sources': [
+            '<(V8_ROOT)/src/base/debug/stack_trace_posix.cc',
+            '<(V8_ROOT)/src/base/platform/platform-openbsd.cc',
+            '<(V8_ROOT)/src/base/platform/platform-posix.h',
+            '<(V8_ROOT)/src/base/platform/platform-posix.cc',
+            '<(V8_ROOT)/src/base/platform/platform-posix-time.h',
+            '<(V8_ROOT)/src/base/platform/platform-posix-time.cc',
+          ],
+        }
+         ],
         ['OS=="netbsd"', {
-            'link_settings': {
-              'libraries': [
-                '-L/usr/pkg/lib -Wl,-R/usr/pkg/lib -lexecinfo',
-            ]},
-            'sources': [
-              '<(V8_ROOT)/src/base/debug/stack_trace_posix.cc',
-              '<(V8_ROOT)/src/base/platform/platform-openbsd.cc',
-              '<(V8_ROOT)/src/base/platform/platform-posix.h',
-              '<(V8_ROOT)/src/base/platform/platform-posix.cc',
-              '<(V8_ROOT)/src/base/platform/platform-posix-time.h',
-              '<(V8_ROOT)/src/base/platform/platform-posix-time.cc',
-            ],
-          }
-        ],
+          'link_settings': {
+            'libraries': [
+              '-L/usr/pkg/lib -Wl,-R/usr/pkg/lib -lexecinfo',
+            ]
+          },
+          'sources': [
+            '<(V8_ROOT)/src/base/debug/stack_trace_posix.cc',
+            '<(V8_ROOT)/src/base/platform/platform-openbsd.cc',
+            '<(V8_ROOT)/src/base/platform/platform-posix.h',
+            '<(V8_ROOT)/src/base/platform/platform-posix.cc',
+            '<(V8_ROOT)/src/base/platform/platform-posix-time.h',
+            '<(V8_ROOT)/src/base/platform/platform-posix-time.cc',
+          ],
+        }
+         ],
       ],
-    }, # v8_libbase
+    },  # v8_libbase
     {
       'target_name': 'v8_libplatform',
       'type': 'static_library',
@@ -1408,11 +1475,14 @@
         '<(V8_ROOT)/src/libplatform/worker-thread.h',
       ],
       'conditions': [
+        ['want_separate_host_toolset', {
+          'toolsets': ['host', 'target'],
+        }],
         ['component=="shared_library"', {
           'direct_dependent_settings': {
-            'defines': [ 'USING_V8_PLATFORM_SHARED' ],
+            'defines': ['USING_V8_PLATFORM_SHARED'],
           },
-          'defines': [ 'BUILDING_V8_PLATFORM_SHARED' ],
+          'defines': ['BUILDING_V8_PLATFORM_SHARED'],
         }],
         ['v8_use_perfetto', {
           'sources': [
@@ -1438,10 +1508,15 @@
           '<(V8_ROOT)/include',
         ],
       },
-    }, # v8_libplatform
+    },  # v8_libplatform
     {
       'target_name': 'v8_libsampler',
       'type': 'static_library',
+      'conditions': [
+        ['want_separate_host_toolset', {
+          'toolsets': ['host', 'target'],
+        }],
+      ],
       'dependencies': [
         'v8_libbase',
       ],
@@ -1449,21 +1524,27 @@
         '<(V8_ROOT)/src/libsampler/sampler.cc',
         '<(V8_ROOT)/src/libsampler/sampler.h'
       ],
-    }, # v8_libsampler
-    {
-      'target_name': 'fuzzer_support',
-      'type': 'static_library',
-      'dependencies': [
-        'v8',
-        'v8_libbase',
-        'v8_libplatform',
-        'v8_maybe_icu',
-      ],
-      'sources': [
-        "<(V8_ROOT)/test/fuzzer/fuzzer-support.cc",
-        "<(V8_ROOT)/test/fuzzer/fuzzer-support.h",
-      ],
-    }, # fuzzer_support
+    },  # v8_libsampler
+
+    # {
+    #   'target_name': 'fuzzer_support',
+    #   'type': 'static_library',
+    #   'conditions': [
+    #     ['want_separate_host_toolset', {
+    #       'toolsets': ['host', 'target'],
+    #     }],
+    #   ],
+    #   'dependencies': [
+    #     'v8',
+    #     'v8_libbase',
+    #     'v8_libplatform',
+    #     'v8_maybe_icu',
+    #   ],
+    #   'sources': [
+    #     "<(V8_ROOT)/test/fuzzer/fuzzer-support.cc",
+    #     "<(V8_ROOT)/test/fuzzer/fuzzer-support.h",
+    #   ],
+    # },  # fuzzer_support
 
     # {
     #   'target_name': 'wee8',
@@ -1490,6 +1571,7 @@
     {
       'target_name': 'bytecode_builtins_list_generator',
       'type': 'executable',
+      'toolsets': ['host'],
       'dependencies': [
         "v8_libbase",
         # "build/win:default_exe_manifest",
@@ -1501,10 +1583,11 @@
         "<(V8_ROOT)/src/interpreter/bytecodes.cc",
         "<(V8_ROOT)/src/interpreter/bytecodes.h",
       ],
-    }, # bytecode_builtins_list_generator
+    },  # bytecode_builtins_list_generator
     {
       'target_name': 'mksnapshot',
       'type': 'executable',
+      'toolsets': ['host'],
       'dependencies': [
         'v8_base_without_compiler',
         'v8_compiler_for_mksnapshot',
@@ -1526,10 +1609,10 @@
       ],
       'conditions': [
         ['OS == "fuchsia"', {
-          'defines': [ 'V8_TARGET_OS_FUCHSIA' ],
+          'defines': ['V8_TARGET_OS_FUCHSIA'],
         }],
         ['OS=="win"', {
-          'defines': [ 'V8_TARGET_OS_WIN' ],
+          'defines': ['V8_TARGET_OS_WIN'],
           'msvs_precompiled_header': '<(V8_ROOT)/../../tools/msvs/pch/v8_pch.h',
           'msvs_precompiled_source': '<(V8_ROOT)/../../tools/msvs/pch/v8_pch.cc',
           'sources': [
@@ -1538,10 +1621,11 @@
           ],
         }],
       ],
-    }, # mksnapshot
+    },  # mksnapshot
     {
       'target_name': 'torque',
       'type': 'executable',
+      'toolsets': ['host'],
       'dependencies': [
         'torque_base',
         # "build/win:default_exe_manifest",
@@ -1553,7 +1637,7 @@
       'cflags_cc!': ['-fno-exceptions'],
       'cflags_cc': ['-fexceptions'],
       'xcode_settings': {
-        'GCC_ENABLE_CPP_EXCEPTIONS': 'YES',        # -fexceptions
+        'GCC_ENABLE_CPP_EXCEPTIONS': 'YES',  # -fexceptions
       },
       'msvs_settings': {
         'VCCLCompilerTool': {
@@ -1571,10 +1655,11 @@
       'sources': [
         "<(V8_ROOT)/src/torque/torque.cc",
       ],
-    }, # torque
+    },  # torque
     {
       'target_name': 'torque-language-server',
       'type': 'executable',
+      'toolsets': ['host'],
       'dependencies': [
         'torque_base',
         'torque_ls_base',
@@ -1593,7 +1678,7 @@
       'sources': [
         "<(V8_ROOT)/src/torque/ls/torque-language-server.cc",
       ],
-    }, # torque-language-server
+    },  # torque-language-server
 
     ###############################################################################
     # Public targets
@@ -1602,7 +1687,10 @@
     {
       'target_name': 'v8',
       'hard_dependency': 1,
-      'dependencies': [ 'v8_maybe_snapshot' ],
+      'toolsets': ['target'],
+      'dependencies': [
+        'v8_maybe_snapshot'
+      ],
       'conditions': [
         ['component=="shared_library"', {
           'type': '<(component)',
@@ -1630,9 +1718,9 @@
             }],
           ],
         },
-        {
-          'type': 'static_library',
-        }],
+         {
+           'type': 'static_library',
+         }],
       ],
       'direct_dependent_settings': {
         'include_dirs': [
@@ -1679,7 +1767,7 @@
           'conditions': [
             ['v8_target_arch=="mips" or v8_target_arch=="mipsel" \
               or v8_target_arch=="mips64" or v8_target_arch=="mips64el"', {
-              'v8_dump_build_config_args':[
+              'v8_dump_build_config_args': [
                 'mips_arch_variant=<(mips_arch_variant)',
                 'mips_use_msa=<(mips_use_msa)',
               ],
@@ -1691,7 +1779,7 @@
           ],
         },
       ],
-    }, # v8
+    },  # v8
     # missing a bunch of fuzzer targets
 
     ###############################################################################
@@ -1701,6 +1789,11 @@
     {
       'target_name': 'postmortem-metadata',
       'type': 'none',
+      'conditions': [
+        ['want_separate_host_toolset', {
+          'toolsets': ['host', 'target'],
+        }],
+      ],
       'variables': {
         'heapobject_files': [
           '<!@pymod_do_main(GN-scraper "<(V8_ROOT)/BUILD.gn"  "\\"postmortem-metadata.*?sources = ")',
@@ -1725,8 +1818,8 @@
         },
       ],
       'direct_dependent_settings': {
-        'sources': [ '<(SHARED_INTERMEDIATE_DIR)/debug-support.cc', ],
+        'sources': ['<(SHARED_INTERMEDIATE_DIR)/debug-support.cc', ],
       },
-    }, # postmortem-metadata
+    },  # postmortem-metadata
   ],
 }
