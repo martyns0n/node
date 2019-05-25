@@ -6,7 +6,7 @@
 
 #include "src/v8.h"
 #include "src/snapshot/natives.h"
-#include "src/utils.h"
+#include "src/utils/utils.h"
 
 namespace v8 {
 namespace internal {
