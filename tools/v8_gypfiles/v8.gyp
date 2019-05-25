@@ -481,7 +481,7 @@
           'inputs': [
             '<(mksnapshot_exec)',
           ],
-          'process_outputs_as_sources': '1',
+          'process_outputs_as_sources': 1,
           'conditions': [
             ['v8_enable_embedded_builtins', {
               # In this case we use `embedded_variant "Default"`
@@ -540,9 +540,6 @@
                },
              }],
           ],
-          'direct_dependent_settings': {
-            'sources': ['<@(_outputs)'],
-          },
           'action': [
             '>@(_inputs)',
             '>@(mksnapshot_flags)',
@@ -1591,6 +1588,9 @@
           'toolsets': ['host'],
         }],
       ],
+      'defines!': [
+        'BUILDING_V8_SHARED=1',
+      ],
       'dependencies': [
         "v8_libbase",
         # "build/win:default_exe_manifest",
@@ -1631,12 +1631,6 @@
         }],
         ['OS=="win"', {
           'defines': ['V8_TARGET_OS_WIN'],
-          'msvs_precompiled_header': '<(V8_ROOT)/../../tools/msvs/pch/v8_pch.h',
-          'msvs_precompiled_source': '<(V8_ROOT)/../../tools/msvs/pch/v8_pch.cc',
-          'sources': [
-            '<(_msvs_precompiled_header)',
-            '<(_msvs_precompiled_source)',
-          ],
         }],
         ['want_separate_host_toolset', {
           'toolsets': ['host'],
