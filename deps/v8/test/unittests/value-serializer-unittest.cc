@@ -8,9 +8,9 @@
 #include <string>
 
 #include "include/v8.h"
-#include "src/api-inl.h"
+#include "src/api/api-inl.h"
 #include "src/base/build_config.h"
-#include "src/objects-inl.h"
+#include "src/objects/objects-inl.h"
 #include "src/wasm/wasm-objects.h"
 #include "test/unittests/test-utils.h"
 #include "testing/gmock/include/gmock/gmock.h"

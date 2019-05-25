@@ -6,10 +6,10 @@
 
 #include "src/ast/ast-value-factory.h"
 #include "src/debug/debug.h"
-#include "src/handles.h"
-#include "src/isolate.h"
-#include "src/messages.h"
-#include "src/objects-inl.h"
+#include "src/execution/isolate.h"
+#include "src/execution/messages.h"
+#include "src/handles/handles.h"
+#include "src/objects/objects-inl.h"
 
 namespace v8 {
 namespace internal {
@@ -107,7 +107,6 @@ void PendingCompilationErrorHandler::ThrowPendingError(Isolate* isolate,
       break;
     default:
       UNREACHABLE();
-      break;
   }
 
   if (!error->IsJSObject()) {
@@ -142,9 +141,8 @@ void PendingCompilationErrorHandler::ThrowPendingError(Isolate* isolate,
 
 Handle<String> PendingCompilationErrorHandler::FormatErrorMessageForTest(
     Isolate* isolate) const {
-  return MessageFormatter::FormatMessage(
-      isolate, error_details_.message(),
-      error_details_.ArgumentString(isolate));
+  return MessageFormatter::Format(isolate, error_details_.message(),
+                                  error_details_.ArgumentString(isolate));
 }
 
 }  // namespace internal

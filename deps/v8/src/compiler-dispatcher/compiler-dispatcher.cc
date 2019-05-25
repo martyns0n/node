@@ -8,10 +8,10 @@
 #include "src/base/platform/time.h"
 #include "src/base/template-utils.h"
 #include "src/cancelable-task.h"
-#include "src/compiler.h"
+#include "src/codegen/compiler.h"
 #include "src/flags.h"
-#include "src/global-handles.h"
-#include "src/objects-inl.h"
+#include "src/handles/global-handles.h"
+#include "src/objects/objects-inl.h"
 #include "src/parsing/parse-info.h"
 #include "src/parsing/parser.h"
 #include "src/task-utils.h"
@@ -104,7 +104,7 @@ void CompilerDispatcher::RegisterSharedFunctionInfo(
 
   if (trace_compiler_dispatcher_) {
     PrintF("CompilerDispatcher: registering ");
-    function->ShortPrint();
+    function.ShortPrint();
     PrintF(" with job id %zu\n", job_id);
   }
 

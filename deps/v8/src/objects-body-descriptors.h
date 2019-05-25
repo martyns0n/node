@@ -5,8 +5,8 @@
 #ifndef V8_OBJECTS_BODY_DESCRIPTORS_H_
 #define V8_OBJECTS_BODY_DESCRIPTORS_H_
 
-#include "src/objects.h"
 #include "src/objects/map.h"
+#include "src/objects/objects.h"
 
 namespace v8 {
 namespace internal {
@@ -45,6 +45,10 @@ class BodyDescriptorBase {
   template <typename ObjectVisitor>
   static inline void IterateCustomWeakPointer(HeapObject obj, int offset,
                                               ObjectVisitor* v);
+
+  template <typename ObjectVisitor>
+  static inline void IterateEphemeron(HeapObject obj, int index, int key_offset,
+                                      int value_offset, ObjectVisitor* v);
 
   template <typename ObjectVisitor>
   static inline void IterateMaybeWeakPointers(HeapObject obj, int start_offset,
@@ -120,7 +124,6 @@ class FlexibleBodyDescriptor final : public BodyDescriptorBase {
 
   static inline int SizeOf(Map map, HeapObject object);
 };
-
 
 typedef FlexibleBodyDescriptor<HeapObject::kHeaderSize> StructBodyDescriptor;
 

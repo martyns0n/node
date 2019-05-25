@@ -5,14 +5,14 @@
 #ifndef V8_PTR_COMPR_INL_H_
 #define V8_PTR_COMPR_INL_H_
 
-#if V8_TARGET_ARCH_64_BIT
-
 #include "include/v8-internal.h"
+#include "src/execution/isolate.h"
 #include "src/ptr-compr.h"
 
 namespace v8 {
 namespace internal {
 
+#if V8_TARGET_ARCH_64_BIT
 // Compresses full-pointer representation of a tagged value to on-heap
 // representation.
 V8_INLINE Tagged_t CompressTagged(Address tagged) {
@@ -20,32 +20,62 @@ V8_INLINE Tagged_t CompressTagged(Address tagged) {
 }
 
 // Calculates isolate root value from any on-heap address.
-V8_INLINE Address GetRootFromOnHeapAddress(Address addr) {
-  return RoundDown(addr + kPtrComprIsolateRootBias,
-                   kPtrComprIsolateRootAlignment);
+template <typename TOnHeapAddress>
+V8_INLINE Address GetIsolateRoot(TOnHeapAddress on_heap_addr);
+
+template <>
+V8_INLINE Address GetIsolateRoot<Address>(Address on_heap_addr) {
+  return RoundDown<kPtrComprIsolateRootAlignment>(on_heap_addr +
+                                                  kPtrComprIsolateRootBias);
+}
+
+template <>
+V8_INLINE Address GetIsolateRoot<Isolate*>(Isolate* isolate) {
+  return isolate->isolate_root();
+}
+
+template <>
+V8_INLINE Address GetIsolateRoot<const Isolate*>(const Isolate* isolate) {
+  return isolate->isolate_root();
+}
+
+// Decompresses smi value.
+V8_INLINE Address DecompressTaggedSigned(Tagged_t raw_value) {
+  // Current compression scheme requires |raw_value| to be sign-extended
+  // from int32_t to intptr_t.
+  intptr_t value = static_cast<intptr_t>(static_cast<int32_t>(raw_value));
+  return static_cast<Address>(value);
 }
 
 // Decompresses weak or strong heap object pointer or forwarding pointer,
 // preserving both weak- and smi- tags.
-V8_INLINE Address DecompressTaggedPointer(Address on_heap_addr,
+template <typename TOnHeapAddress>
+V8_INLINE Address DecompressTaggedPointer(TOnHeapAddress on_heap_addr,
                                           Tagged_t raw_value) {
   // Current compression scheme requires |raw_value| to be sign-extended
   // from int32_t to intptr_t.
   intptr_t value = static_cast<intptr_t>(static_cast<int32_t>(raw_value));
-  Address root = GetRootFromOnHeapAddress(on_heap_addr);
+  Address root = GetIsolateRoot(on_heap_addr);
   return root + static_cast<Address>(value);
 }
 
 // Decompresses any tagged value, preserving both weak- and smi- tags.
-V8_INLINE Address DecompressTaggedAny(Address on_heap_addr,
+template <typename TOnHeapAddress>
+V8_INLINE Address DecompressTaggedAny(TOnHeapAddress on_heap_addr,
                                       Tagged_t raw_value) {
   // Current compression scheme requires |raw_value| to be sign-extended
   // from int32_t to intptr_t.
   intptr_t value = static_cast<intptr_t>(static_cast<int32_t>(raw_value));
-  // |root_mask| is 0 if the |value| was a smi or -1 otherwise.
-  Address root_mask = static_cast<Address>(-(value & kSmiTagMask));
-  Address root_or_zero = root_mask & GetRootFromOnHeapAddress(on_heap_addr);
-  return root_or_zero + static_cast<Address>(value);
+  if (kUseBranchlessPtrDecompression) {
+    // |root_mask| is 0 if the |value| was a smi or -1 otherwise.
+    Address root_mask = static_cast<Address>(-(value & kSmiTagMask));
+    Address root_or_zero = root_mask & GetIsolateRoot(on_heap_addr);
+    return root_or_zero + static_cast<Address>(value);
+  } else {
+    return HAS_SMI_TAG(value)
+               ? static_cast<Address>(value)
+               : (GetIsolateRoot(on_heap_addr) + static_cast<Address>(value));
+  }
 }
 
 #ifdef V8_COMPRESS_POINTERS
@@ -58,9 +88,26 @@ STATIC_ASSERT(kPtrComprIsolateRootAlignment ==
 
 #endif  // V8_COMPRESS_POINTERS
 
-}  // namespace internal
-}  // namespace v8
+#else
+
+V8_INLINE Tagged_t CompressTagged(Address tagged) { UNREACHABLE(); }
+
+V8_INLINE Address DecompressTaggedSigned(Tagged_t raw_value) { UNREACHABLE(); }
+
+template <typename TOnHeapAddress>
+V8_INLINE Address DecompressTaggedPointer(TOnHeapAddress on_heap_addr,
+                                          Tagged_t raw_value) {
+  UNREACHABLE();
+}
+
+template <typename TOnHeapAddress>
+V8_INLINE Address DecompressTaggedAny(TOnHeapAddress on_heap_addr,
+                                      Tagged_t raw_value) {
+  UNREACHABLE();
+}
 
 #endif  // V8_TARGET_ARCH_64_BIT
+}  // namespace internal
+}  // namespace v8
 
 #endif  // V8_PTR_COMPR_INL_H_

@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "src/microtask-queue.h"
+#include "src/execution/microtask-queue.h"
 
 #include <algorithm>
 #include <functional>
@@ -10,10 +10,10 @@
 #include <vector>
 
 #include "src/heap/factory.h"
-#include "src/objects-inl.h"
 #include "src/objects/foreign.h"
 #include "src/objects/js-array-inl.h"
 #include "src/objects/js-objects-inl.h"
+#include "src/objects/objects-inl.h"
 #include "src/objects/promise-inl.h"
 #include "src/visitors.h"
 #include "test/unittests/test-utils.h"
@@ -240,9 +240,9 @@ TEST_F(MicrotaskQueueTest, PromiseHandlerContext) {
   Handle<Context> context2 = Utils::OpenHandle(*v8_context2, isolate());
   Handle<Context> context3 = Utils::OpenHandle(*v8_context3, isolate());
   Handle<Context> context4 = Utils::OpenHandle(*v8_context3, isolate());
-  context2->native_context()->set_microtask_queue(microtask_queue());
-  context3->native_context()->set_microtask_queue(microtask_queue());
-  context4->native_context()->set_microtask_queue(microtask_queue());
+  context2->native_context().set_microtask_queue(microtask_queue());
+  context3->native_context().set_microtask_queue(microtask_queue());
+  context4->native_context().set_microtask_queue(microtask_queue());
 
   Handle<JSFunction> handler;
   Handle<JSProxy> proxy;
@@ -515,11 +515,38 @@ TEST_F(MicrotaskQueueTest, DetachGlobal_HandlerContext) {
           .FromJust());
 }
 
+TEST_F(MicrotaskQueueTest, DetachGlobal_Chain) {
+  Handle<JSPromise> stale_rejected_promise;
+
+  Local<v8::Context> sub_context = v8::Context::New(v8_isolate());
+  {
+    v8::Context::Scope scope(sub_context);
+    stale_rejected_promise = RunJS<JSPromise>("Promise.reject()");
+  }
+  sub_context->DetachGlobal();
+  sub_context.Clear();
+
+  SetGlobalProperty(
+      "stale_rejected_promise",
+      Utils::ToLocal(Handle<JSReceiver>::cast(stale_rejected_promise)));
+  Handle<JSArray> result = RunJS<JSArray>(
+      "let result = [false];"
+      "stale_rejected_promise"
+      "  .then(() => {})"
+      "  .catch(() => {"
+      "    result[0] = true;"
+      "  });"
+      "result");
+  microtask_queue()->RunMicrotasks(isolate());
+  EXPECT_TRUE(
+      Object::GetElement(isolate(), result, 0).ToHandleChecked()->IsTrue());
+}
+
 TEST_F(MicrotaskQueueTest, DetachGlobal_InactiveHandler) {
   Local<v8::Context> sub_context = v8::Context::New(v8_isolate());
   Utils::OpenHandle(*sub_context)
       ->native_context()
-      ->set_microtask_queue(microtask_queue());
+      .set_microtask_queue(microtask_queue());
 
   Handle<JSArray> result;
   Handle<JSFunction> stale_handler;
@@ -555,6 +582,22 @@ TEST_F(MicrotaskQueueTest, DetachGlobal_InactiveHandler) {
       Object::GetElement(isolate(), result, 0).ToHandleChecked()->IsFalse());
   EXPECT_TRUE(
       Object::GetElement(isolate(), result, 1).ToHandleChecked()->IsFalse());
+}
+
+TEST_F(MicrotaskQueueTest, MicrotasksScope) {
+  ASSERT_NE(isolate()->default_microtask_queue(), microtask_queue());
+  microtask_queue()->set_microtasks_policy(MicrotasksPolicy::kScoped);
+
+  bool ran = false;
+  {
+    MicrotasksScope scope(v8_isolate(), microtask_queue(),
+                          MicrotasksScope::kRunMicrotasks);
+    microtask_queue()->EnqueueMicrotask(*NewMicrotask([&ran]() {
+      EXPECT_FALSE(ran);
+      ran = true;
+    }));
+  }
+  EXPECT_TRUE(ran);
 }
 
 }  // namespace internal

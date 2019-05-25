@@ -4,11 +4,11 @@
 
 #include <cmath>
 
-#include "src/conversions.h"
+#include "src/execution/isolate.h"
 #include "src/heap/factory.h"
-#include "src/isolate.h"
-#include "src/objects-inl.h"
+#include "src/numbers/conversions.h"
 #include "src/objects/bigint.h"
+#include "src/objects/objects-inl.h"
 #include "test/unittests/test-utils.h"
 
 #include "testing/gtest/include/gtest/gtest.h"

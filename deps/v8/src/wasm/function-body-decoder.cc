@@ -5,9 +5,9 @@
 #include "src/wasm/function-body-decoder.h"
 
 #include "src/flags.h"
-#include "src/handles.h"
-#include "src/objects-inl.h"
-#include "src/ostreams.h"
+#include "src/utils/ostreams.h"
+#include "src/handles/handles.h"
+#include "src/objects/objects-inl.h"
 #include "src/wasm/decoder.h"
 #include "src/wasm/function-body-decoder-impl.h"
 #include "src/wasm/wasm-limits.h"
@@ -234,7 +234,8 @@ bool PrintRawWasmCode(AccountingAllocator* allocator, const FunctionBody& body,
         break;
       }
       case kExprCallIndirect: {
-        CallIndirectImmediate<Decoder::kNoValidate> imm(&i, i.pc());
+        CallIndirectImmediate<Decoder::kNoValidate> imm(kAllWasmFeatures, &i,
+                                                        i.pc());
         os << "   // sig #" << imm.sig_index;
         if (decoder.Complete(i.pc(), imm)) {
           os << ": " << *imm.sig;

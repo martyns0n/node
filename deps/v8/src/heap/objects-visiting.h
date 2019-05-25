@@ -5,14 +5,15 @@
 #ifndef V8_HEAP_OBJECTS_VISITING_H_
 #define V8_HEAP_OBJECTS_VISITING_H_
 
-#include "src/objects.h"
 #include "src/objects/fixed-array.h"
 #include "src/objects/map.h"
+#include "src/objects/objects.h"
 #include "src/visitors.h"
 
 namespace v8 {
 namespace internal {
 
+// TODO(jkummerow): Drop the duplication: V(x, x) -> V(x).
 #define TYPED_VISITOR_ID_LIST_CLASSES(V)                                  \
   V(AllocationSite, AllocationSite)                                       \
   V(BigInt, BigInt)                                                       \
@@ -59,6 +60,7 @@ namespace internal {
   V(TransitionArray, TransitionArray)                                     \
   V(UncompiledDataWithoutPreparseData, UncompiledDataWithoutPreparseData) \
   V(UncompiledDataWithPreparseData, UncompiledDataWithPreparseData)       \
+  V(WasmCapiFunctionData, WasmCapiFunctionData)                           \
   V(WasmInstanceObject, WasmInstanceObject)
 
 #define FORWARD_DECLARE(TypeName, Type) class Type;

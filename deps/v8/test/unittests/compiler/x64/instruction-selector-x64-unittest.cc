@@ -5,7 +5,7 @@
 #include "test/unittests/compiler/backend/instruction-selector-unittest.h"
 
 #include "src/compiler/node-matchers.h"
-#include "src/objects-inl.h"
+#include "src/objects/objects-inl.h"
 
 namespace v8 {
 namespace internal {
@@ -1721,15 +1721,6 @@ TEST_F(InstructionSelectorTest, LoadAndWord64ShiftRight32) {
     ASSERT_EQ(1U, s[0]->OutputCount());
     EXPECT_EQ(s.ToVreg(shift), s.ToVreg(s[0]->Output()));
   }
-}
-
-TEST_F(InstructionSelectorTest, SpeculationFence) {
-  StreamBuilder m(this, MachineType::Int32());
-  m.SpeculationFence();
-  m.Return(m.Int32Constant(0));
-  Stream s = m.Build();
-  ASSERT_EQ(1U, s.size());
-  EXPECT_EQ(kLFence, s[0]->arch_opcode());
 }
 
 TEST_F(InstructionSelectorTest, StackCheck0) {

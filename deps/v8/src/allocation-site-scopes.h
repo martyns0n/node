@@ -5,10 +5,10 @@
 #ifndef V8_ALLOCATION_SITE_SCOPES_H_
 #define V8_ALLOCATION_SITE_SCOPES_H_
 
-#include "src/handles.h"
-#include "src/objects.h"
+#include "src/handles/handles.h"
 #include "src/objects/allocation-site.h"
 #include "src/objects/map.h"
+#include "src/objects/objects.h"
 
 namespace v8 {
 namespace internal {
@@ -30,7 +30,7 @@ class AllocationSiteContext {
 
  protected:
   void update_current_site(AllocationSite site) {
-    *(current_.location()) = site->ptr();
+    *(current_.location()) = site.ptr();
   }
 
   inline void InitializeTraversal(Handle<AllocationSite> site);

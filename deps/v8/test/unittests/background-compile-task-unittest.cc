@@ -5,14 +5,14 @@
 #include <memory>
 
 #include "include/v8.h"
-#include "src/api-inl.h"
+#include "src/api/api-inl.h"
 #include "src/ast/ast.h"
 #include "src/ast/scopes.h"
 #include "src/base/platform/semaphore.h"
 #include "src/base/template-utils.h"
-#include "src/compiler.h"
+#include "src/codegen/compiler.h"
+#include "src/execution/isolate-inl.h"
 #include "src/flags.h"
-#include "src/isolate-inl.h"
 #include "src/objects/smi.h"
 #include "src/parsing/parse-info.h"
 #include "src/parsing/parser.h"
@@ -233,7 +233,7 @@ TEST_F(BackgroundCompileTaskTest, EagerInnerFunctions) {
 
   Handle<JSFunction> e = RunJS<JSFunction>("f();");
 
-  ASSERT_TRUE(e->shared()->is_compiled());
+  ASSERT_TRUE(e->shared().is_compiled());
 }
 
 TEST_F(BackgroundCompileTaskTest, LazyInnerFunctions) {
@@ -261,7 +261,7 @@ TEST_F(BackgroundCompileTaskTest, LazyInnerFunctions) {
 
   Handle<JSFunction> e = RunJS<JSFunction>("f();");
 
-  ASSERT_FALSE(e->shared()->is_compiled());
+  ASSERT_FALSE(e->shared().is_compiled());
 }
 
 }  // namespace internal

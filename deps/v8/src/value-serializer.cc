@@ -7,24 +7,24 @@
 #include <type_traits>
 
 #include "include/v8-value-serializer-version.h"
-#include "src/api-inl.h"
+#include "src/api/api-inl.h"
 #include "src/base/logging.h"
-#include "src/conversions.h"
+#include "src/execution/isolate.h"
 #include "src/flags.h"
-#include "src/handles-inl.h"
+#include "src/handles/handles-inl.h"
+#include "src/handles/maybe-handles-inl.h"
 #include "src/heap/factory.h"
-#include "src/isolate.h"
-#include "src/maybe-handles-inl.h"
-#include "src/objects-inl.h"
+#include "src/numbers/conversions.h"
 #include "src/objects/heap-number-inl.h"
 #include "src/objects/js-array-inl.h"
 #include "src/objects/js-collection-inl.h"
 #include "src/objects/js-regexp-inl.h"
+#include "src/objects/objects-inl.h"
 #include "src/objects/oddball-inl.h"
 #include "src/objects/ordered-hash-table-inl.h"
 #include "src/objects/smi.h"
+#include "src/objects/transitions-inl.h"
 #include "src/snapshot/code-serializer.h"
-#include "src/transitions.h"
 #include "src/wasm/wasm-engine.h"
 #include "src/wasm/wasm-objects-inl.h"
 #include "src/wasm/wasm-result.h"
@@ -268,12 +268,12 @@ void ValueSerializer::WriteTwoByteString(Vector<const uc16> chars) {
 }
 
 void ValueSerializer::WriteBigIntContents(BigInt bigint) {
-  uint32_t bitfield = bigint->GetBitfieldForSerialization();
+  uint32_t bitfield = bigint.GetBitfieldForSerialization();
   int bytelength = BigInt::DigitsByteLengthForBitfield(bitfield);
   WriteVarint<uint32_t>(bitfield);
   uint8_t* dest;
   if (ReserveRawBytes(bytelength).To(&dest)) {
-    bigint->SerializeDigits(dest);
+    bigint.SerializeDigits(dest);
   }
 }
 
@@ -356,7 +356,7 @@ Maybe<bool> ValueSerializer::WriteObject(Handle<Object> object) {
   }
 
   DCHECK(object->IsHeapObject());
-  switch (HeapObject::cast(*object)->map()->instance_type()) {
+  switch (HeapObject::cast(*object).map().instance_type()) {
     case ODDBALL_TYPE:
       WriteOddball(Oddball::cast(*object));
       return ThrowIfOutOfMemory();
@@ -401,7 +401,7 @@ Maybe<bool> ValueSerializer::WriteObject(Handle<Object> object) {
 
 void ValueSerializer::WriteOddball(Oddball oddball) {
   SerializationTag tag = SerializationTag::kUndefined;
-  switch (oddball->kind()) {
+  switch (oddball.kind()) {
     case Oddball::kUndefined:
       tag = SerializationTag::kUndefined;
       break;
@@ -416,7 +416,6 @@ void ValueSerializer::WriteOddball(Oddball oddball) {
       break;
     default:
       UNREACHABLE();
-      break;
   }
   WriteTag(tag);
 }
@@ -424,17 +423,17 @@ void ValueSerializer::WriteOddball(Oddball oddball) {
 void ValueSerializer::WriteSmi(Smi smi) {
   static_assert(kSmiValueSize <= 32, "Expected SMI <= 32 bits.");
   WriteTag(SerializationTag::kInt32);
-  WriteZigZag<int32_t>(smi->value());
+  WriteZigZag<int32_t>(smi.value());
 }
 
 void ValueSerializer::WriteHeapNumber(HeapNumber number) {
   WriteTag(SerializationTag::kDouble);
-  WriteDouble(number->value());
+  WriteDouble(number.value());
 }
 
 void ValueSerializer::WriteMutableHeapNumber(MutableHeapNumber number) {
   WriteTag(SerializationTag::kDouble);
-  WriteDouble(number->value());
+  WriteDouble(number.value());
 }
 
 void ValueSerializer::WriteBigInt(BigInt bigint) {
@@ -478,7 +477,7 @@ Maybe<bool> ValueSerializer::WriteJSReceiver(Handle<JSReceiver> receiver) {
   *id_map_entry = id + 1;
 
   // Eliminate callable and exotic objects, which should not be serialized.
-  InstanceType instance_type = receiver->map()->instance_type();
+  InstanceType instance_type = receiver->map().instance_type();
   if (receiver->IsCallable() || (IsSpecialReceiverInstanceType(instance_type) &&
                                  instance_type != JS_SPECIAL_API_OBJECT_TYPE)) {
     ThrowDataCloneError(MessageTemplate::kDataCloneError, receiver);
@@ -544,9 +543,9 @@ Maybe<bool> ValueSerializer::WriteJSReceiver(Handle<JSReceiver> receiver) {
 }
 
 Maybe<bool> ValueSerializer::WriteJSObject(Handle<JSObject> object) {
-  DCHECK(!object->map()->IsCustomElementsReceiverMap());
+  DCHECK(!object->map().IsCustomElementsReceiverMap());
   const bool can_serialize_fast =
-      object->HasFastProperties() && object->elements()->length() == 0;
+      object->HasFastProperties() && object->elements().length() == 0;
   if (!can_serialize_fast) return WriteJSObjectSlow(object);
 
   Handle<Map> map(object->map(), isolate_);
@@ -557,9 +556,9 @@ Maybe<bool> ValueSerializer::WriteJSObject(Handle<JSObject> object) {
   uint32_t properties_written = 0;
   bool map_changed = false;
   for (int i = 0; i < map->NumberOfOwnDescriptors(); i++) {
-    Handle<Name> key(map->instance_descriptors()->GetKey(i), isolate_);
+    Handle<Name> key(map->instance_descriptors().GetKey(i), isolate_);
     if (!key->IsString()) continue;
-    PropertyDetails details = map->instance_descriptors()->GetDetails(i);
+    PropertyDetails details = map->instance_descriptors().GetDetails(i);
     if (details.IsDontEnum()) continue;
 
     Handle<Object> value;
@@ -607,7 +606,7 @@ Maybe<bool> ValueSerializer::WriteJSObjectSlow(Handle<JSObject> object) {
 
 Maybe<bool> ValueSerializer::WriteJSArray(Handle<JSArray> array) {
   uint32_t length = 0;
-  bool valid_length = array->length()->ToArrayLength(&length);
+  bool valid_length = array->length().ToArrayLength(&length);
   DCHECK(valid_length);
   USE(valid_length);
 
@@ -654,7 +653,7 @@ Maybe<bool> ValueSerializer::WriteJSArray(Handle<JSArray> array) {
             // Fall back to slow path.
             break;
           }
-          Handle<Object> element(FixedArray::cast(array->elements())->get(i),
+          Handle<Object> element(FixedArray::cast(array->elements()).get(i),
                                  isolate_);
           if (!WriteObject(element).FromMaybe(false)) return Nothing<bool>();
         }
@@ -718,26 +717,26 @@ Maybe<bool> ValueSerializer::WriteJSArray(Handle<JSArray> array) {
 
 void ValueSerializer::WriteJSDate(JSDate date) {
   WriteTag(SerializationTag::kDate);
-  WriteDouble(date->value()->Number());
+  WriteDouble(date.value().Number());
 }
 
 Maybe<bool> ValueSerializer::WriteJSValue(Handle<JSValue> value) {
   Object inner_value = value->value();
-  if (inner_value->IsTrue(isolate_)) {
+  if (inner_value.IsTrue(isolate_)) {
     WriteTag(SerializationTag::kTrueObject);
-  } else if (inner_value->IsFalse(isolate_)) {
+  } else if (inner_value.IsFalse(isolate_)) {
     WriteTag(SerializationTag::kFalseObject);
-  } else if (inner_value->IsNumber()) {
+  } else if (inner_value.IsNumber()) {
     WriteTag(SerializationTag::kNumberObject);
-    WriteDouble(inner_value->Number());
-  } else if (inner_value->IsBigInt()) {
+    WriteDouble(inner_value.Number());
+  } else if (inner_value.IsBigInt()) {
     WriteTag(SerializationTag::kBigIntObject);
     WriteBigIntContents(BigInt::cast(inner_value));
-  } else if (inner_value->IsString()) {
+  } else if (inner_value.IsString()) {
     WriteTag(SerializationTag::kStringObject);
     WriteString(handle(String::cast(inner_value), isolate_));
   } else {
-    DCHECK(inner_value->IsSymbol());
+    DCHECK(inner_value.IsSymbol());
     ThrowDataCloneError(MessageTemplate::kDataCloneError, value);
     return Nothing<bool>();
   }
@@ -746,8 +745,8 @@ Maybe<bool> ValueSerializer::WriteJSValue(Handle<JSValue> value) {
 
 void ValueSerializer::WriteJSRegExp(JSRegExp regexp) {
   WriteTag(SerializationTag::kRegExp);
-  WriteString(handle(regexp->Pattern(), isolate_));
-  WriteVarint(static_cast<uint32_t>(regexp->GetFlags()));
+  WriteString(handle(regexp.Pattern(), isolate_));
+  WriteVarint(static_cast<uint32_t>(regexp.GetFlags()));
 }
 
 Maybe<bool> ValueSerializer::WriteJSMap(Handle<JSMap> map) {
@@ -856,8 +855,8 @@ Maybe<bool> ValueSerializer::WriteJSArrayBufferView(JSArrayBufferView view) {
   }
   WriteTag(SerializationTag::kArrayBufferView);
   ArrayBufferViewTag tag = ArrayBufferViewTag::kInt8Array;
-  if (view->IsJSTypedArray()) {
-    switch (JSTypedArray::cast(view)->type()) {
+  if (view.IsJSTypedArray()) {
+    switch (JSTypedArray::cast(view).type()) {
 #define TYPED_ARRAY_CASE(Type, type, TYPE, ctype) \
   case kExternal##Type##Array:                    \
     tag = ArrayBufferViewTag::k##Type##Array;     \
@@ -866,12 +865,12 @@ Maybe<bool> ValueSerializer::WriteJSArrayBufferView(JSArrayBufferView view) {
 #undef TYPED_ARRAY_CASE
     }
   } else {
-    DCHECK(view->IsJSDataView());
+    DCHECK(view.IsJSDataView());
     tag = ArrayBufferViewTag::kDataView;
   }
   WriteVarint(static_cast<uint8_t>(tag));
-  WriteVarint(static_cast<uint32_t>(view->byte_offset()));
-  WriteVarint(static_cast<uint32_t>(view->byte_length()));
+  WriteVarint(static_cast<uint32_t>(view.byte_offset()));
+  WriteVarint(static_cast<uint32_t>(view.byte_length()));
   return ThrowIfOutOfMemory();
 }
 
@@ -900,7 +899,7 @@ Maybe<bool> ValueSerializer::WriteWasmModule(Handle<WasmModuleObject> object) {
   WriteVarint<uint32_t>(static_cast<uint32_t>(wire_bytes.size()));
   uint8_t* destination;
   if (ReserveRawBytes(wire_bytes.size()).To(&destination)) {
-    memcpy(destination, wire_bytes.start(), wire_bytes.size());
+    memcpy(destination, wire_bytes.begin(), wire_bytes.size());
   }
 
   wasm::WasmSerializer wasm_serializer(native_module);
@@ -917,10 +916,13 @@ Maybe<bool> ValueSerializer::WriteWasmModule(Handle<WasmModuleObject> object) {
 }
 
 Maybe<bool> ValueSerializer::WriteWasmMemory(Handle<WasmMemoryObject> object) {
-  if (!object->array_buffer()->is_shared()) {
+  if (!object->array_buffer().is_shared()) {
     ThrowDataCloneError(MessageTemplate::kDataCloneError, object);
     return Nothing<bool>();
   }
+
+  isolate_->wasm_engine()->memory_tracker()->RegisterWasmMemoryAsShared(
+      object, isolate_);
 
   WriteTag(SerializationTag::kWasmMemoryTransfer);
   WriteZigZag<int32_t>(object->maximum_pages());
@@ -987,8 +989,7 @@ Maybe<bool> ValueSerializer::ThrowIfOutOfMemory() {
 
 void ValueSerializer::ThrowDataCloneError(MessageTemplate index,
                                           Handle<Object> arg0) {
-  Handle<String> message =
-      MessageFormatter::FormatMessage(isolate_, index, arg0);
+  Handle<String> message = MessageFormatter::Format(isolate_, index, arg0);
   if (delegate_) {
     delegate_->ThrowDataCloneError(Utils::ToLocal(message));
   } else {
@@ -1005,9 +1006,10 @@ ValueDeserializer::ValueDeserializer(Isolate* isolate,
                                      v8::ValueDeserializer::Delegate* delegate)
     : isolate_(isolate),
       delegate_(delegate),
-      position_(data.start()),
-      end_(data.start() + data.length()),
-      pretenure_(data.length() > kPretenureThreshold ? TENURED : NOT_TENURED),
+      position_(data.begin()),
+      end_(data.begin() + data.length()),
+      allocation_(data.length() > kPretenureThreshold ? AllocationType::kOld
+                                                      : AllocationType::kYoung),
       id_map_(isolate->global_handles()->Create(
           ReadOnlyRoots(isolate_).empty_fixed_array())) {}
 
@@ -1197,18 +1199,18 @@ MaybeHandle<Object> ValueDeserializer::ReadObjectInternal() {
       Maybe<int32_t> number = ReadZigZag<int32_t>();
       if (number.IsNothing()) return MaybeHandle<Object>();
       return isolate_->factory()->NewNumberFromInt(number.FromJust(),
-                                                   pretenure_);
+                                                   allocation_);
     }
     case SerializationTag::kUint32: {
       Maybe<uint32_t> number = ReadVarint<uint32_t>();
       if (number.IsNothing()) return MaybeHandle<Object>();
       return isolate_->factory()->NewNumberFromUint(number.FromJust(),
-                                                    pretenure_);
+                                                    allocation_);
     }
     case SerializationTag::kDouble: {
       Maybe<double> number = ReadDouble();
       if (number.IsNothing()) return MaybeHandle<Object>();
-      return isolate_->factory()->NewNumber(number.FromJust(), pretenure_);
+      return isolate_->factory()->NewNumber(number.FromJust(), allocation_);
     }
     case SerializationTag::kBigInt:
       return ReadBigInt();
@@ -1291,7 +1293,7 @@ MaybeHandle<BigInt> ValueDeserializer::ReadBigInt() {
     return MaybeHandle<BigInt>();
   }
   return BigInt::FromSerializedDigits(isolate_, bitfield, digits_storage,
-                                      pretenure_);
+                                      allocation_);
 }
 
 MaybeHandle<String> ValueDeserializer::ReadUtf8String() {
@@ -1304,7 +1306,7 @@ MaybeHandle<String> ValueDeserializer::ReadUtf8String() {
     return MaybeHandle<String>();
   }
   return isolate_->factory()->NewStringFromUtf8(
-      Vector<const char>::cast(utf8_bytes), pretenure_);
+      Vector<const char>::cast(utf8_bytes), allocation_);
 }
 
 MaybeHandle<String> ValueDeserializer::ReadOneByteString() {
@@ -1316,7 +1318,7 @@ MaybeHandle<String> ValueDeserializer::ReadOneByteString() {
       !ReadRawBytes(byte_length).To(&bytes)) {
     return MaybeHandle<String>();
   }
-  return isolate_->factory()->NewStringFromOneByte(bytes, pretenure_);
+  return isolate_->factory()->NewStringFromOneByte(bytes, allocation_);
 }
 
 MaybeHandle<String> ValueDeserializer::ReadTwoByteString() {
@@ -1335,7 +1337,7 @@ MaybeHandle<String> ValueDeserializer::ReadTwoByteString() {
   if (byte_length == 0) return isolate_->factory()->empty_string();
   Handle<SeqTwoByteString> string;
   if (!isolate_->factory()
-           ->NewRawTwoByteString(byte_length / sizeof(uc16), pretenure_)
+           ->NewRawTwoByteString(byte_length / sizeof(uc16), allocation_)
            .ToHandle(&string)) {
     return MaybeHandle<String>();
   }
@@ -1398,8 +1400,8 @@ MaybeHandle<JSObject> ValueDeserializer::ReadJSObject() {
 
   uint32_t id = next_id_++;
   HandleScope scope(isolate_);
-  Handle<JSObject> object =
-      isolate_->factory()->NewJSObject(isolate_->object_function(), pretenure_);
+  Handle<JSObject> object = isolate_->factory()->NewJSObject(
+      isolate_->object_function(), allocation_);
   AddObjectWithID(id, object);
 
   uint32_t num_properties;
@@ -1425,7 +1427,7 @@ MaybeHandle<JSArray> ValueDeserializer::ReadSparseJSArray() {
   uint32_t id = next_id_++;
   HandleScope scope(isolate_);
   Handle<JSArray> array = isolate_->factory()->NewJSArray(
-      0, TERMINAL_FAST_ELEMENTS_KIND, pretenure_);
+      0, TERMINAL_FAST_ELEMENTS_KIND, allocation_);
   JSArray::SetLength(array, length);
   AddObjectWithID(id, array);
 
@@ -1462,7 +1464,7 @@ MaybeHandle<JSArray> ValueDeserializer::ReadDenseJSArray() {
   HandleScope scope(isolate_);
   Handle<JSArray> array = isolate_->factory()->NewJSArray(
       HOLEY_ELEMENTS, length, length, INITIALIZE_ARRAY_ELEMENTS_WITH_HOLE,
-      pretenure_);
+      allocation_);
   AddObjectWithID(id, array);
 
   Handle<FixedArray> elements(FixedArray::cast(array->elements()), isolate_);
@@ -1523,21 +1525,21 @@ MaybeHandle<JSValue> ValueDeserializer::ReadJSValue(SerializationTag tag) {
   switch (tag) {
     case SerializationTag::kTrueObject:
       value = Handle<JSValue>::cast(isolate_->factory()->NewJSObject(
-          isolate_->boolean_function(), pretenure_));
+          isolate_->boolean_function(), allocation_));
       value->set_value(ReadOnlyRoots(isolate_).true_value());
       break;
     case SerializationTag::kFalseObject:
       value = Handle<JSValue>::cast(isolate_->factory()->NewJSObject(
-          isolate_->boolean_function(), pretenure_));
+          isolate_->boolean_function(), allocation_));
       value->set_value(ReadOnlyRoots(isolate_).false_value());
       break;
     case SerializationTag::kNumberObject: {
       double number;
       if (!ReadDouble().To(&number)) return MaybeHandle<JSValue>();
       value = Handle<JSValue>::cast(isolate_->factory()->NewJSObject(
-          isolate_->number_function(), pretenure_));
+          isolate_->number_function(), allocation_));
       Handle<Object> number_object =
-          isolate_->factory()->NewNumber(number, pretenure_);
+          isolate_->factory()->NewNumber(number, allocation_);
       value->set_value(*number_object);
       break;
     }
@@ -1545,7 +1547,7 @@ MaybeHandle<JSValue> ValueDeserializer::ReadJSValue(SerializationTag tag) {
       Handle<BigInt> bigint;
       if (!ReadBigInt().ToHandle(&bigint)) return MaybeHandle<JSValue>();
       value = Handle<JSValue>::cast(isolate_->factory()->NewJSObject(
-          isolate_->bigint_function(), pretenure_));
+          isolate_->bigint_function(), allocation_));
       value->set_value(*bigint);
       break;
     }
@@ -1553,7 +1555,7 @@ MaybeHandle<JSValue> ValueDeserializer::ReadJSValue(SerializationTag tag) {
       Handle<String> string;
       if (!ReadString().ToHandle(&string)) return MaybeHandle<JSValue>();
       value = Handle<JSValue>::cast(isolate_->factory()->NewJSObject(
-          isolate_->string_function(), pretenure_));
+          isolate_->string_function(), allocation_));
       value->set_value(*string);
       break;
     }
@@ -1691,8 +1693,8 @@ MaybeHandle<JSArrayBuffer> ValueDeserializer::ReadJSArrayBuffer(
     return MaybeHandle<JSArrayBuffer>();
   }
   const bool should_initialize = false;
-  Handle<JSArrayBuffer> array_buffer =
-      isolate_->factory()->NewJSArrayBuffer(SharedFlag::kNotShared, pretenure_);
+  Handle<JSArrayBuffer> array_buffer = isolate_->factory()->NewJSArrayBuffer(
+      SharedFlag::kNotShared, allocation_);
   if (!JSArrayBuffer::SetupAllocatingData(array_buffer, isolate_, byte_length,
                                           should_initialize)) {
     return MaybeHandle<JSArrayBuffer>();
@@ -1761,7 +1763,7 @@ MaybeHandle<JSArrayBufferView> ValueDeserializer::ReadJSArrayBufferView(
   }
   Handle<JSTypedArray> typed_array = isolate_->factory()->NewJSTypedArray(
       external_array_type, buffer, byte_offset, byte_length / element_size,
-      pretenure_);
+      allocation_);
   AddObjectWithID(id, typed_array);
   return typed_array;
 }
@@ -1866,6 +1868,9 @@ MaybeHandle<WasmMemoryObject> ValueDeserializer::ReadWasmMemory() {
   Handle<WasmMemoryObject> result =
       WasmMemoryObject::New(isolate_, buffer, maximum_pages);
 
+  isolate_->wasm_engine()->memory_tracker()->RegisterWasmMemoryAsShared(
+      result, isolate_);
+
   AddObjectWithID(id, result);
   return result;
 }
@@ -1891,13 +1896,13 @@ MaybeHandle<JSObject> ValueDeserializer::ReadHostObject() {
 static void CommitProperties(Handle<JSObject> object, Handle<Map> map,
                              const std::vector<Handle<Object>>& properties) {
   JSObject::AllocateStorageForMap(object, map);
-  DCHECK(!object->map()->is_dictionary_map());
+  DCHECK(!object->map().is_dictionary_map());
 
   DisallowHeapAllocation no_gc;
-  DescriptorArray descriptors = object->map()->instance_descriptors();
+  DescriptorArray descriptors = object->map().instance_descriptors();
   for (unsigned i = 0; i < properties.size(); i++) {
     // Initializing store.
-    object->WriteToField(i, descriptors->GetDetails(i), *properties[i]);
+    object->WriteToField(i, descriptors.GetDetails(i), *properties[i]);
   }
 }
 
@@ -1915,7 +1920,7 @@ Maybe<uint32_t> ValueDeserializer::ReadJSObjectProperties(
     bool transitioning = true;
     Handle<Map> map(object->map(), isolate_);
     DCHECK(!map->is_dictionary_map());
-    DCHECK_EQ(0, map->instance_descriptors()->number_of_descriptors());
+    DCHECK_EQ(0, map->instance_descriptors().number_of_descriptors());
     std::vector<Handle<Object>> properties;
     properties.reserve(8);
 
@@ -1966,13 +1971,13 @@ Maybe<uint32_t> ValueDeserializer::ReadJSObjectProperties(
       if (transitioning) {
         int descriptor = static_cast<int>(properties.size());
         PropertyDetails details =
-            target->instance_descriptors()->GetDetails(descriptor);
+            target->instance_descriptors().GetDetails(descriptor);
         Representation expected_representation = details.representation();
         if (value->FitsRepresentation(expected_representation)) {
           if (expected_representation.IsHeapObject() &&
               !target->instance_descriptors()
-                   ->GetFieldType(descriptor)
-                   ->NowContains(value)) {
+                   .GetFieldType(descriptor)
+                   .NowContains(value)) {
             Handle<FieldType> value_type =
                 value->OptimalType(isolate_, expected_representation);
             Map::GeneralizeField(isolate_, target, descriptor,
@@ -1980,8 +1985,8 @@ Maybe<uint32_t> ValueDeserializer::ReadJSObjectProperties(
                                  value_type);
           }
           DCHECK(target->instance_descriptors()
-                     ->GetFieldType(descriptor)
-                     ->NowContains(value));
+                     .GetFieldType(descriptor)
+                     .NowContains(value));
           properties.push_back(value);
           map = target;
           continue;
@@ -2044,7 +2049,7 @@ Maybe<uint32_t> ValueDeserializer::ReadJSObjectProperties(
 
 bool ValueDeserializer::HasObjectWithID(uint32_t id) {
   return id < static_cast<unsigned>(id_map_->length()) &&
-         !id_map_->get(id)->IsTheHole(isolate_);
+         !id_map_->get(id).IsTheHole(isolate_);
 }
 
 MaybeHandle<JSReceiver> ValueDeserializer::GetObjectWithID(uint32_t id) {
@@ -2052,8 +2057,8 @@ MaybeHandle<JSReceiver> ValueDeserializer::GetObjectWithID(uint32_t id) {
     return MaybeHandle<JSReceiver>();
   }
   Object value = id_map_->get(id);
-  if (value->IsTheHole(isolate_)) return MaybeHandle<JSReceiver>();
-  DCHECK(value->IsJSReceiver());
+  if (value.IsTheHole(isolate_)) return MaybeHandle<JSReceiver>();
+  DCHECK(value.IsJSReceiver());
   return Handle<JSReceiver>(JSReceiver::cast(value), isolate_);
 }
 
@@ -2131,7 +2136,7 @@ ValueDeserializer::ReadObjectUsingEntireBufferForLegacyFormat() {
         size_t begin_properties =
             stack.size() - 2 * static_cast<size_t>(num_properties);
         Handle<JSObject> js_object = isolate_->factory()->NewJSObject(
-            isolate_->object_function(), pretenure_);
+            isolate_->object_function(), allocation_);
         if (num_properties &&
             !SetPropertiesFromKeyValuePairs(
                  isolate_, js_object, &stack[begin_properties], num_properties)
@@ -2159,7 +2164,7 @@ ValueDeserializer::ReadObjectUsingEntireBufferForLegacyFormat() {
         }
 
         Handle<JSArray> js_array = isolate_->factory()->NewJSArray(
-            0, TERMINAL_FAST_ELEMENTS_KIND, pretenure_);
+            0, TERMINAL_FAST_ELEMENTS_KIND, allocation_);
         JSArray::SetLength(js_array, length);
         size_t begin_properties =
             stack.size() - 2 * static_cast<size_t>(num_properties);

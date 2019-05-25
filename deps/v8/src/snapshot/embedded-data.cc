@@ -4,9 +4,9 @@
 
 #include "src/snapshot/embedded-data.h"
 
-#include "src/assembler-inl.h"
-#include "src/callable.h"
-#include "src/objects-inl.h"
+#include "src/codegen/assembler-inl.h"
+#include "src/codegen/callable.h"
+#include "src/objects/objects-inl.h"
 #include "src/snapshot/snapshot.h"
 
 namespace v8 {
@@ -89,8 +89,8 @@ void InstructionStream::FreeOffHeapInstructionStream(uint8_t* data,
 namespace {
 
 bool BuiltinAliasesOffHeapTrampolineRegister(Isolate* isolate, Code code) {
-  DCHECK(Builtins::IsIsolateIndependent(code->builtin_index()));
-  switch (Builtins::KindOf(code->builtin_index())) {
+  DCHECK(Builtins::IsIsolateIndependent(code.builtin_index()));
+  switch (Builtins::KindOf(code.builtin_index())) {
     case Builtins::CPP:
     case Builtins::TFC:
     case Builtins::TFH:
@@ -101,14 +101,13 @@ bool BuiltinAliasesOffHeapTrampolineRegister(Isolate* isolate, Code code) {
     // Bytecode handlers will only ever be used by the interpreter and so there
     // will never be a need to use trampolines with them.
     case Builtins::BCH:
-    case Builtins::API:
     case Builtins::ASM:
       // TODO(jgruber): Extend checks to remaining kinds.
       return false;
   }
 
   Callable callable = Builtins::CallableFor(
-      isolate, static_cast<Builtins::Name>(code->builtin_index()));
+      isolate, static_cast<Builtins::Name>(code.builtin_index()));
   CallInterfaceDescriptor descriptor = callable.descriptor();
 
   if (descriptor.ContextRegister() == kOffHeapTrampolineRegister) {
@@ -152,7 +151,7 @@ void FinalizeEmbeddedCodeTargets(Isolate* isolate, EmbeddedData* blob) {
 
       // Do not emit write-barrier for off-heap writes.
       off_heap_it.rinfo()->set_target_address(
-          blob->InstructionStartOfBuiltin(target->builtin_index()),
+          blob->InstructionStartOfBuiltin(target.builtin_index()),
           SKIP_WRITE_BARRIER);
 
       on_heap_it.next();
@@ -186,7 +185,7 @@ EmbeddedData EmbeddedData::FromIsolate(Isolate* isolate) {
     if (Builtins::IsIsolateIndependent(i)) {
       // Sanity-check that the given builtin is isolate-independent and does not
       // use the trampoline register in its calling convention.
-      if (!code->IsIsolateIndependent(isolate)) {
+      if (!code.IsIsolateIndependent(isolate)) {
         saw_unsafe_builtin = true;
         fprintf(stderr, "%s is not isolate-independent.\n", Builtins::name(i));
       }
@@ -206,7 +205,7 @@ EmbeddedData EmbeddedData::FromIsolate(Isolate* isolate) {
                 Builtins::name(i));
       }
 
-      uint32_t length = static_cast<uint32_t>(code->raw_instruction_size());
+      uint32_t length = static_cast<uint32_t>(code.raw_instruction_size());
 
       DCHECK_EQ(0, raw_data_size % kCodeAlignment);
       metadata[i].instructions_offset = raw_data_size;
@@ -249,10 +248,10 @@ EmbeddedData EmbeddedData::FromIsolate(Isolate* isolate) {
     Code code = builtins->builtin(i);
     uint32_t offset = metadata[i].instructions_offset;
     uint8_t* dst = raw_data_start + offset;
-    DCHECK_LE(RawDataOffset() + offset + code->raw_instruction_size(),
+    DCHECK_LE(RawDataOffset() + offset + code.raw_instruction_size(),
               blob_size);
-    std::memcpy(dst, reinterpret_cast<uint8_t*>(code->raw_instruction_start()),
-                code->raw_instruction_size());
+    std::memcpy(dst, reinterpret_cast<uint8_t*>(code.raw_instruction_start()),
+                code.raw_instruction_size());
   }
 
   EmbeddedData d(blob, blob_size);
@@ -288,6 +287,19 @@ uint32_t EmbeddedData::InstructionSizeOfBuiltin(int i) const {
   DCHECK(Builtins::IsBuiltinId(i));
   const struct Metadata* metadata = Metadata();
   return metadata[i].instructions_length;
+}
+
+Address EmbeddedData::InstructionStartOfBytecodeHandlers() const {
+  return InstructionStartOfBuiltin(Builtins::kFirstBytecodeHandler);
+}
+
+Address EmbeddedData::InstructionEndOfBytecodeHandlers() const {
+  STATIC_ASSERT(Builtins::kFirstBytecodeHandler + kNumberOfBytecodeHandlers +
+                    2 * kNumberOfWideBytecodeHandlers ==
+                Builtins::builtin_count);
+  int lastBytecodeHandler = Builtins::builtin_count - 1;
+  return InstructionStartOfBuiltin(lastBytecodeHandler) +
+         InstructionSizeOfBuiltin(lastBytecodeHandler);
 }
 
 size_t EmbeddedData::CreateEmbeddedBlobHash() const {

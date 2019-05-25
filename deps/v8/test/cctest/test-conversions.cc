@@ -28,11 +28,11 @@
 #include <stdlib.h>
 
 #include "src/base/platform/platform.h"
-#include "src/conversions.h"
+#include "src/execution/isolate.h"
 #include "src/heap/factory-inl.h"
-#include "src/isolate.h"
-#include "src/objects.h"
+#include "src/numbers/conversions.h"
 #include "src/objects/heap-number-inl.h"
+#include "src/objects/objects.h"
 #include "src/objects/smi.h"
 #include "src/v8.h"
 #include "test/cctest/cctest.h"

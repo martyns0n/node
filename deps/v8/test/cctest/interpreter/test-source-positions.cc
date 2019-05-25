@@ -4,13 +4,13 @@
 
 #include "src/v8.h"
 
-#include "src/api-inl.h"
+#include "src/api/api-inl.h"
 #include "src/compiler/pipeline.h"
-#include "src/handles.h"
+#include "src/execution/isolate.h"
+#include "src/handles/handles.h"
 #include "src/interpreter/bytecode-generator.h"
 #include "src/interpreter/interpreter.h"
-#include "src/isolate.h"
-#include "src/objects-inl.h"
+#include "src/objects/objects-inl.h"
 #include "test/cctest/cctest.h"
 #include "test/cctest/interpreter/source-position-matcher.h"
 
@@ -172,7 +172,7 @@ Handle<BytecodeArray> OptimizedBytecodeSourcePositionTester::MakeBytecode(
           .ToLocalChecked());
   Handle<JSFunction> function =
       Handle<JSFunction>::cast(v8::Utils::OpenHandle(*api_function));
-  return handle(function->shared()->GetBytecodeArray(), isolate_);
+  return handle(function->shared().GetBytecodeArray(), isolate_);
 }
 
 void OptimizedBytecodeSourcePositionTester::SetOptimizationFlags(
